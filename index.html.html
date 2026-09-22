@@ -1,0 +1,1600 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ระบบหมุนเวียนถังดองผลไม้</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!--
+  ===================== วิธีตั้งค่า Google Drive Sync (ทำครั้งเดียว) =====================
+  1) ไปที่ https://console.cloud.google.com/ สร้างโปรเจกต์ใหม่ (หรือใช้โปรเจกต์เดิม)
+  2) เปิดใช้งาน "Google Drive API" ที่เมนู APIs & Services > Library
+  3) ไปที่ APIs & Services > OAuth consent screen
+     - เลือก User Type = External
+     - กรอกชื่อแอป/อีเมลติดต่อ แล้วบันทึก ไม่ต้อง Publish (ปล่อยเป็นสถานะ Testing)
+     - ไปแท็บ "Test users" เพิ่มอีเมล Gmail ของทุกคนในทีมที่จะใช้แอปนี้ (สูงสุด 100 คน)
+  4) ไปที่ APIs & Services > Credentials > Create Credentials > OAuth client ID
+     - Application type = Web application
+     - Authorized JavaScript origins = ใส่ URL ที่จะโฮสต์ไฟล์นี้ เช่น https://yourname.github.io
+     - กด Create แล้วคัดลอก "Client ID" มาใส่ที่ GOOGLE_CLIENT_ID ด้านล่างในไฟล์นี้
+  5) อัปโหลดไฟล์นี้ขึ้นโฮสต์ที่ตั้งไว้ในข้อ 3 แล้วเปิดผ่าน URL นั้น (เปิดจากไฟล์ในเครื่องโดยตรงจะใช้ไม่ได้)
+  6) เปิดแอป กด "เข้าสู่ระบบด้วย Google" ครั้งแรกจะสร้างไฟล์ข้อมูลใน Drive ให้อัตโนมัติ
+     และจะมีข้อความให้คัดลอก "File ID" มาใส่ที่ DRIVE_FILE_ID ด้านล่าง แล้วอัปโหลดไฟล์นี้ทับอีกครั้ง
+  7) เข้า Google Drive ของคนที่กดสร้างไฟล์ครั้งแรก หาไฟล์ชื่อ "tank-rotation-data.json"
+     คลิกขวา > แชร์ (Share) แล้วเพิ่มอีเมล Gmail ของทุกคนในทีมเป็นสิทธิ์ "ผู้แก้ไข (Editor)"
+  หลังจากนั้นทุกคนที่ล็อกอินด้วย Gmail ที่ได้รับสิทธิ์ จะเห็นและแก้ไขข้อมูลชุดเดียวกันทั้งหมด
+  ============================================================================
+-->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root{
+    --bg:#EFF2E9;
+    --surface:#FFFFFF;
+    --surface-2:#F7F8F3;
+    --ink:#182620;
+    --ink-soft:#54645C;
+    --primary:#1F3A34;
+    --primary-2:#2B4E45;
+    --accent:#C97A2B;
+    --accent-soft:#F3DDBB;
+    --ok:#3E7C6B;
+    --ok-soft:#DCEBE6;
+    --danger:#A63D2C;
+    --danger-soft:#F4DAD3;
+    --line:#D9DED2;
+    --line-strong:#BFC7B7;
+    --radius-tank: 10px;
+    --radius-card: 14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Noto Sans Thai', sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:'JetBrains Mono', monospace;}
+  .small{font-size:.78em;opacity:.75;}
+  button{font-family:inherit;cursor:pointer;}
+  input,select{font-family:inherit;}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  @media (prefers-reduced-motion: reduce){ *{transition:none !important;animation:none !important;} }
+
+  .loading{padding:40px;text-align:center;color:var(--ink-soft);}
+
+  .shell{display:flex;min-height:100vh;}
+  .sidebar{
+    width:230px;flex:0 0 230px;background:var(--primary);color:#EAF0EC;
+    display:flex;flex-direction:column;padding:22px 16px;gap:18px;
+  }
+  .brand{display:flex;align-items:center;gap:10px;padding:0 4px 12px;border-bottom:1px solid rgba(255,255,255,.15);}
+  .brand-mark{font-size:26px;line-height:1;color:var(--accent);}
+  .brand-text{font-weight:700;font-size:15px;line-height:1.3;}
+  .tabs{display:flex;flex-direction:column;gap:4px;flex:1;}
+  .tab-btn{
+    background:transparent;border:none;color:#D6E0D9;text-align:left;
+    padding:10px 12px;border-radius:8px;font-size:14.5px;font-weight:500;
+  }
+  .tab-btn:hover{background:rgba(255,255,255,.08);}
+  .tab-btn.active{background:var(--accent);color:#241300;font-weight:600;}
+  .sidebar-foot{font-size:11.5px;color:#B7C4BB;line-height:1.5;border-top:1px solid rgba(255,255,255,.15);padding-top:12px;}
+
+  .content{flex:1;min-width:0;padding:26px 30px 60px;}
+  .content-head h1{margin:0 0 18px;font-size:22px;font-weight:700;color:var(--primary);}
+  .content-body{display:flex;flex-direction:column;gap:20px;}
+
+  .toolbar{
+    display:flex;align-items:center;gap:22px;flex-wrap:wrap;
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-card);
+    padding:14px 18px;
+  }
+  .toolbar label{font-size:14px;color:var(--ink-soft);display:flex;align-items:center;gap:8px;}
+  .toolbar input[type=date]{padding:6px 8px;border:1px solid var(--line-strong);border-radius:6px;font-size:14px;}
+  .toolbar-hint{font-size:13px;color:var(--ink-soft);}
+  .link-btn{border:none;background:none;color:var(--primary);font-size:12.5px;font-weight:600;text-decoration:underline;padding:0;margin-left:4px;}
+  .link-btn:hover{color:var(--primary-2);}
+  .base-date-panel{border-color:var(--accent);}
+  .base-date-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+  .base-date-badge{font-size:15px;font-weight:700;color:var(--primary);background:var(--surface-2);border:1px solid var(--line-strong);border-radius:8px;padding:8px 14px;}
+  .btn-unlock, .btn-lock{border:none;border-radius:7px;padding:8px 16px;font-size:13px;font-weight:600;}
+  .btn-unlock{background:var(--danger-soft);color:var(--danger);}
+  .btn-unlock:hover{background:var(--danger);color:#fff;}
+  .btn-lock{background:var(--ok-soft);color:var(--ok);}
+  .btn-lock:hover{background:var(--ok);color:#fff;}
+
+  /* Daily report */
+  .lines-grid{display:flex;flex-direction:column;gap:14px;}
+  .line-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-card);padding:16px 18px;}
+  .line-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+  .line-id{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:17px;color:var(--primary);}
+  .line-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .badge{font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:20px;}
+  .badge-normal{background:var(--ok-soft);color:var(--ok);}
+  .badge-temporarily_idle{background:#E6E3DC;color:var(--ink-soft);}
+  .badge-opening{background:#DCEAF7;color:#1D5A8A;}
+  .badge-closing{background:#EDE0DC;color:#8B3A2E;}
+  .badge-date_based{background:var(--accent-soft);color:#8A4E13;}
+  .fruit-tag{font-size:11.5px;background:var(--surface-2);border:1px solid var(--line);padding:3px 9px;border-radius:20px;color:var(--ink-soft);}
+  .line-hold{margin-left:auto;}
+  .auth-overlay{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:999;text-align:center;padding:24px;}
+  .auth-box{background:var(--surface);border-radius:16px;padding:32px 28px;max-width:360px;box-shadow:0 8px 30px rgba(0,0,0,.12);}
+  .auth-box h2{margin:0 0 8px;font-size:18px;color:var(--primary);}
+  .auth-box p{margin:0 0 20px;font-size:13.5px;color:var(--ink-soft);line-height:1.6;}
+  .btn-google{border:1px solid #dadce0;background:#fff;color:#3c4043;border-radius:24px;padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;}
+  .btn-google:hover{background:#f7f8f8;}
+  .auth-error{margin-top:14px;font-size:12.5px;color:var(--danger,#B3402A);}
+  .save-status{position:fixed;bottom:16px;right:16px;font-size:12px;padding:6px 12px;border-radius:16px;background:var(--surface);box-shadow:0 2px 10px rgba(0,0,0,.1);color:var(--ink-soft);z-index:500;display:flex;align-items:center;gap:6px;}
+  .save-status.saving{color:var(--accent);}
+  .save-status.error{color:#fff;background:#B3402A;font-weight:600;}
+  .save-status.ok{color:var(--ok);}
+  .setup-banner{position:fixed;top:0;left:0;right:0;background:#B3402A;color:#fff;padding:10px 16px;font-size:13px;text-align:center;z-index:998;}
+  .setup-banner .mono{background:rgba(255,255,255,.2);padding:2px 6px;border-radius:4px;}
+  .btn-confirm-plan{border:1px solid var(--ok);color:var(--ok);background:#fff;border-radius:20px;padding:5px 14px;font-size:12.5px;font-weight:600;margin-right:8px;}
+  .btn-confirm-plan:hover{background:var(--ok);color:#fff;}
+  .config-history-section{margin-top:18px;padding-top:16px;border-top:1px solid var(--surface-2);}
+  .config-history-section h4{margin:0 0 6px;font-size:14px;color:var(--primary);}
+  .config-history-form{margin-top:10px;}
+  .btn-hold{border:1px solid var(--danger);color:var(--danger);background:#fff;border-radius:20px;padding:5px 14px;font-size:12.5px;font-weight:600;}
+  .btn-hold:hover{background:var(--danger-soft);}
+  .btn-hold.active{background:var(--danger);color:#fff;}
+  .btn-hold.held{background:var(--danger);color:#fff;border-color:var(--danger);}
+
+  .tank-row{display:flex;gap:10px;flex-wrap:wrap;}
+  .tank{
+    width:82px;min-height:74px;border:1px solid var(--line-strong);border-radius:var(--radius-tank);
+    background:var(--surface-2);padding:8px 6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;
+  }
+  .tank-no{font-size:10.5px;color:var(--ink-soft);}
+  .tank-val{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:19px;}
+  .tank-tag{font-size:9.5px;font-weight:700;color:var(--ink-soft);}
+  .tank-dong .tank-tag{color:#8A4E13;}
+  .tank-overflow .tank-tag{color:var(--ink-soft);}
+  .tank-pass .tank-tag{color:var(--ok);}
+  .tank-fail .tank-tag{color:var(--danger);}
+  .tank-conditional .tank-tag{color:#1D5A8A;}
+  .tank-overflow{background:var(--surface-2);border-style:dashed;}
+  .tank-dong{background:var(--accent-soft);border-color:var(--accent);}
+  .tank-pass{background:var(--ok-soft);border-color:var(--ok);}
+  .tank-fail{background:var(--danger-soft);border-color:var(--danger);}
+  .tank-conditional{background:#DCEAF7;border-color:#1D5A8A;}
+  .tank-check{display:flex;gap:3px;margin-top:1px;}
+  .chk-btn{width:18px;height:18px;padding:0;border-radius:5px;border:1px solid var(--line-strong);background:#fff;color:var(--ink-soft);font-size:10px;line-height:1;}
+  .chk-btn:hover{border-color:var(--primary);}
+  .chk-btn.pass.active{background:var(--ok);border-color:var(--ok);color:#fff;}
+  .chk-btn.fail.active{background:var(--danger);border-color:var(--danger);color:#fff;}
+  .chk-btn.conditional.active{background:#1D5A8A;border-color:#1D5A8A;color:#fff;}
+  .chk-release{margin-top:2px;border:none;background:none;color:var(--ink-soft);font-size:9px;text-decoration:underline;padding:0;}
+  .chk-release:hover{color:var(--primary);}
+  .tank-note-text{font-size:9px;color:var(--ink-soft);line-height:1.25;max-width:74px;word-break:break-word;}
+  .tank-due-text{font-size:9px;color:var(--ink-soft);opacity:.8;}
+  .hold-note-text{font-size:12px;color:var(--danger);margin:-4px 0 4px;}
+  .tank-empty .tank-val{color:var(--ink-soft);font-size:13px;font-weight:400;}
+  .tank-water{background:#E6E3DC;}
+  .tank-water .tank-val{font-size:13px;color:var(--ink-soft);}
+  .tank-soak .tank-val{font-size:12.5px;font-weight:600;word-break:break-word;}
+  .tank-soak.ok{background:var(--ok-soft);border-color:var(--ok);}
+  .tank-soak.warn{background:var(--accent-soft);border-color:var(--accent);}
+  .tank-soak.danger{background:var(--danger-soft);border-color:var(--danger);}
+  .tank-soak.empty{background:var(--surface-2);}
+  .tank-clickable{cursor:pointer;}
+  .tank-clickable:hover{border-color:var(--primary);}
+  .tank-open{outline:2px solid var(--primary);outline-offset:1px;}
+  .tank-actual{font-size:9px;font-weight:700;margin-top:1px;padding:1px 7px;border-radius:10px;}
+  .tank-actual.ok{background:var(--ok-soft);color:var(--ok);}
+  .tank-actual.danger{background:var(--danger-soft);color:var(--danger);}
+
+  .quick-entry{display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--surface-2);border:1px solid var(--line-strong);border-radius:10px;padding:10px 12px;margin-top:12px;}
+  .quick-entry-label{font-size:12.5px;color:var(--ink-soft);flex-basis:100%;}
+  .quick-entry input{padding:6px 8px;border:1px solid var(--line-strong);border-radius:6px;font-size:13px;}
+  .quick-entry input[name=actual_value]{width:120px;}
+  .quick-entry input[name=note]{width:200px;}
+  .quick-entry input[name=reason]{width:220px;}
+  .quick-entry button{border:none;border-radius:6px;padding:6px 12px;font-size:12.5px;font-weight:600;}
+  .quick-entry button[type=submit]{background:var(--primary);color:#fff;}
+  .quick-entry button[type=submit]:hover{background:var(--primary-2);}
+  .btn-cancel{background:#E6E3DC;color:var(--ink-soft);}
+
+  /* Weekly table */
+  .table-scroll{overflow-x:auto;}
+  .weekly-table{width:100%;min-width:720px;border-collapse:collapse;background:var(--surface);border-radius:var(--radius-card);overflow:hidden;border:1px solid var(--line);}
+  .weekly-table th,.weekly-table td{padding:10px 10px;text-align:center;border-bottom:1px solid var(--line);font-size:13.5px;vertical-align:middle;}
+  .weekly-table thead th{background:var(--surface-2);color:var(--primary);font-weight:600;}
+  .line-id-cell{font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--primary);background:var(--surface-2);}
+  .cell-empty{color:var(--ink-soft);}
+  .cell-soak{color:var(--ok);font-weight:600;}
+  .cell-schedule{padding:8px 6px;}
+  .wk-tank-grid{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;max-width:96px;margin:0 auto;}
+  .wk-tank{
+    width:26px;height:26px;border-radius:7px;border:1px solid var(--line-strong);background:var(--surface-2);
+    color:var(--ink-soft);font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;padding:0;
+  }
+  .wk-tank:hover{border-color:var(--primary);}
+  .wk-tank.active{background:var(--accent);border-color:var(--accent);color:#241300;}
+  .legend-item{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-soft);}
+  .legend-dot{width:12px;height:12px;border-radius:4px;border:1px solid var(--line-strong);background:var(--surface-2);display:inline-block;}
+  .legend-dot.active{background:var(--accent);border-color:var(--accent);}
+
+  /* Panels & forms */
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-card);padding:16px 18px;}
+  .panel h3{margin:0 0 12px;font-size:15.5px;color:var(--primary);}
+  .inline-form{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+  .inline-form input,.inline-form select{padding:7px 9px;border:1px solid var(--line-strong);border-radius:6px;font-size:13.5px;background:#fff;}
+  .inline-form button{background:var(--primary);color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:13.5px;font-weight:600;}
+  .inline-form button:hover{background:var(--primary-2);}
+  .hint-text{font-size:12.5px;color:var(--ink-soft);margin:8px 0 0;}
+
+  .data-table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  .data-table th,.data-table td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;}
+  .data-table thead th{color:var(--ink-soft);font-weight:600;font-size:12px;}
+  .empty-row{text-align:center;color:var(--ink-soft);padding:18px;}
+  .btn-del{background:none;border:1px solid var(--danger);color:var(--danger);border-radius:6px;padding:4px 10px;font-size:12px;}
+  .btn-del:hover{background:var(--danger-soft);}
+
+  .status-pill{font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:20px;}
+  .status-pill.ok{background:var(--ok-soft);color:var(--ok);}
+  .status-pill.warn{background:var(--accent-soft);color:#8A4E13;}
+  .status-pill.danger{background:var(--danger-soft);color:var(--danger);}
+  .status-pill.neutral{background:#E6E3DC;color:var(--ink-soft);}
+
+  /* Line settings */
+  .lines-edit-grid{display:flex;flex-direction:column;gap:8px;}
+  .line-edit-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-card);padding:2px 16px;}
+  .line-summary{display:flex;align-items:center;gap:12px;flex-wrap:wrap;width:100%;background:none;border:none;text-align:left;padding:11px 0;cursor:pointer;font-family:inherit;color:inherit;}
+  .line-summary:hover{color:var(--primary);}
+  .line-id-badge{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:15.5px;color:var(--primary);}
+  .summary-detail{font-size:12.5px;color:var(--ink-soft);}
+  .summary-fruits{font-size:12px;color:var(--ink-soft);opacity:.85;flex:1;min-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .chevron{margin-left:auto;color:var(--ink-soft);font-size:11px;}
+  .line-detail{padding:2px 0 16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:14px;}
+  .line-edit-row{display:flex;gap:18px;flex-wrap:wrap;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:12px;color:var(--ink-soft);}
+  .field input{padding:8px 10px;border:1px solid var(--line-strong);border-radius:7px;font-size:14.5px;width:110px;font-family:'JetBrains Mono',monospace;}
+  .field input:focus{border-color:var(--primary);}
+  .field select{padding:8px 10px;border:1px solid var(--line-strong);border-radius:7px;font-size:13.5px;width:190px;}
+  .field-hint{font-size:10.5px;color:var(--ink-soft);opacity:.85;}
+  .fruit-picker{display:flex;gap:8px;flex-wrap:wrap;}
+  .chip-check{font-size:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:20px;padding:4px 10px 4px 6px;display:flex;align-items:center;gap:5px;color:var(--ink-soft);}
+  .line-edit-actions{display:flex;gap:8px;}
+  .btn-save{border:none;border-radius:7px;padding:9px 20px;font-size:13.5px;font-weight:600;background:var(--primary);color:#fff;}
+  .btn-save:hover{background:var(--primary-2);}
+  .add-line-card{display:flex;flex-direction:column;gap:14px;padding:16px 18px;border-color:var(--accent);}
+
+  .toast{
+    position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(16px);
+    background:var(--primary);color:#fff;padding:10px 22px;border-radius:30px;
+    font-size:13.5px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.2);
+    opacity:0;pointer-events:none;transition:opacity .22s ease, transform .22s ease;z-index:999;
+    display:flex;align-items:center;gap:8px;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  @media (max-width: 860px){
+    .shell{flex-direction:column;}
+    .sidebar{width:100%;flex:none;flex-direction:row;align-items:center;padding:12px 14px;gap:14px;overflow-x:auto;}
+    .brand{border-bottom:none;padding:0;border-right:1px solid rgba(255,255,255,.15);padding-right:14px;flex:0 0 auto;}
+    .tabs{flex-direction:row;flex:none;}
+    .tab-btn{white-space:nowrap;}
+    .sidebar-foot{display:none;}
+    .content{padding:18px 16px 40px;}
+  }
+</style>
+</head>
+<body>
+<div id="auth-overlay" class="auth-overlay">
+  <div class="auth-box">
+    <h2>ระบบหมุนเวียนถังดองผลไม้</h2>
+    <p>เข้าสู่ระบบด้วย Google เพื่อซิงค์ข้อมูลกับทีม ข้อมูลจะถูกเก็บไว้ใน Google Drive ที่ทีมของคุณแชร์กันไว้</p>
+    <button type="button" class="btn-google" onclick="signInWithGoogle()">เข้าสู่ระบบด้วย Google</button>
+    <div id="auth-error" class="auth-error"></div>
+  </div>
+</div>
+<div id="setup-banner" style="display:none;"></div>
+<div id="save-status" class="save-status" style="display:none;"></div>
+<div id="app"><div class="loading">กำลังโหลดข้อมูล…</div></div>
+<div id="toast" class="toast"></div>
+
+<script>
+/* ===================== Constants ===================== */
+const FRUITS = ["มะม่วง ชิ้นไทย","มะม่วง ชิ้นDip","มะม่วง ชิ้นเดี่ยว","มะม่วง ลูก","มะขาม","มะดัน","มะปราง","มะยม","กระท้อน","มะกอกน้ำ","มะกอกฝรั่ง","องุ่น"];
+const STATUS_LABEL = {normal:'ปกติ', temporarily_idle:'ว่างชั่วคราว', opening:'เปิดไลน์ใหม่', closing:'กำลังปิดไลน์', date_based:'ระบบวันที่ (ถังแช่)'};
+const INACTIVE_STATUSES = ['temporarily_idle','opening','closing'];
+const TABS = [
+  {id:'daily', label:'รายงานรายวัน'},
+  {id:'weekly', label:'แผนรายสัปดาห์'},
+  {id:'soak', label:'ถังแช่'},
+  {id:'actual', label:'บันทึกข้อมูลจริง'},
+  {id:'events', label:'เหตุการณ์พิเศษ'},
+  {id:'lines', label:'ตั้งค่าไลน์'},
+  {id:'inspection', label:'บันทึกตรวจสอบ'}
+];
+
+/* ===================== Date helpers ===================== */
+function dayNum(iso){ const [y,m,d]=iso.split('-').map(Number); return Math.floor(Date.UTC(y,m-1,d)/86400000); }
+function fromDayNum(n){ return new Date(n*86400000).toISOString().slice(0,10); }
+function addDays(iso,n){ return fromDayNum(dayNum(iso)+n); }
+function weekdayIdx(iso){ return ((dayNum(iso)+4)%7+7)%7; } // 0=Sunday
+function isoWeekday(iso){ const w=weekdayIdx(iso); return w===0?7:w; } // Monday=1..Sunday=7
+function mod(a,n){ return ((a%n)+n)%n; }
+function cmpISO(a,b){ return a<b?-1:a>b?1:0; }
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function esc(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function showToast(msg){
+  const el = document.getElementById('toast');
+  if(!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(()=> el.classList.remove('show'), 2200);
+}
+
+function countWorkdays(fromISO, toISO, holidaySet){
+  if(cmpISO(fromISO,toISO)>0) return 0;
+  let count=0;
+  for(let d=dayNum(fromISO); d<=dayNum(toISO); d++){
+    const iso = fromDayNum(d);
+    if(weekdayIdx(iso)!==0 && !holidaySet.has(iso)) count++;
+  }
+  return count;
+}
+function countDatesIn(dateSet, fromISO, toISO){
+  if(cmpISO(fromISO,toISO)>0) return 0;
+  let count=0;
+  for(const d of dateSet){ if(d>=fromISO && d<=toISO) count++; }
+  return count;
+}
+function countFreezes(freezeDates, lo, hi){ // half-open [lo, hi)
+  let count=0;
+  for(const d of freezeDates){ if(d>=lo && d<hi) count++; }
+  return count;
+}
+function mondayOf(iso){ const iw = isoWeekday(iso); return addDays(iso, -(iw-1)); }
+
+/* ===================== Rotation engine ===================== */
+function buildCtx(){
+  return {
+    baseDate: state.settings.base_date,
+    holidaySet: new Set(state.holidays.map(h=>h.date)),
+    sundayExceptionSet: new Set(state.sundayExceptions.map(s=>s.date)),
+    freezesByLine: state.lineFreezes.reduce((acc,f)=>{ (acc[f.line_id] ||= []).push(f.date); return acc; }, {})
+  };
+}
+function resolveLineConfig(line, dateISO){
+  const hist = (line.config_history || []).filter(h=>h.effective_date<=dateISO);
+  if(hist.length){
+    hist.sort((a,b)=> a.effective_date.localeCompare(b.effective_date));
+    return hist[hist.length-1];
+  }
+  return {effective_date:null, status:line.status, cycle_length:line.cycle_length, dongwaan_value:line.dongwaan_value, base_value:line.base_value};
+}
+function workdayDiff(fromISO, toISO, lineId, ctx){
+  if(fromISO===toISO) return 0;
+  const freezeDates = (ctx.freezesByLine[lineId] || []).concat(getAutoHoldFreezeDates(lineId, toISO, ctx));
+  if(toISO > fromISO){
+    let workdays = countWorkdays(addDays(fromISO,1), toISO, ctx.holidaySet);
+    workdays += countDatesIn(ctx.sundayExceptionSet, addDays(fromISO,1), toISO);
+    const freezeCount = countFreezes(freezeDates, fromISO, toISO);
+    return workdays - freezeCount;
+  } else {
+    let workdays = countWorkdays(addDays(toISO,1), fromISO, ctx.holidaySet);
+    workdays += countDatesIn(ctx.sundayExceptionSet, addDays(toISO,1), fromISO);
+    const freezeCount = countFreezes(freezeDates, toISO, fromISO);
+    return workdays + freezeCount;
+  }
+}
+function effectiveDayDiff(lineId, targetISO, ctx){
+  return workdayDiff(ctx.baseDate, targetISO, lineId, ctx);
+}
+function getAutoHoldFreezeDates(lineId, targetISO, ctx){
+  const dates = [];
+  for(const h of state.dongwaanHolds){
+    if(h.line_id !== lineId) continue;
+    const rangeEnd = h.resolved_date || targetISO;
+    if(cmpISO(h.since_date, rangeEnd) >= 0) continue;
+    for(let d=dayNum(h.since_date); d<dayNum(rangeEnd); d++){
+      const iso = fromDayNum(d);
+      const isRotationDay = (weekdayIdx(iso)!==0 && !ctx.holidaySet.has(iso)) || ctx.sundayExceptionSet.has(iso);
+      if(isRotationDay) dates.push(iso);
+    }
+  }
+  return dates;
+}
+function findOpenHold(lineId){
+  return state.dongwaanHolds.find(h=>h.line_id===lineId && h.resolved_date==null) || null;
+}
+function findHoldForLineOnDate(lineId, dateISO){
+  const candidates = state.dongwaanHolds.filter(h=>h.line_id===lineId && h.since_date<=dateISO && (h.resolved_date==null || h.resolved_date>=dateISO));
+  if(!candidates.length) return null;
+  candidates.sort((a,b)=> b.since_date.localeCompare(a.since_date));
+  return candidates[0];
+}
+function ensureAutoHolds(){
+  const dueDate = state.dailyDate;
+  const ctx = buildCtx();
+  let changed = false;
+  for(const line of state.lines){
+    if(resolveLineConfig(line, dueDate).status !== 'normal') continue;
+    if(findOpenHold(line.line_id)) continue;
+    if(findHoldForLineOnDate(line.line_id, dueDate)) continue;
+    const p = dongwaanTank(line, dueDate, ctx);
+    if(p==null) continue;
+    state.dongwaanHolds.push({_id:crypto.randomUUID(), line_id:line.line_id, tank_no:p, since_date:dueDate, status:'pending', note:'', resolved_date:null});
+    changed = true;
+  }
+  if(changed) stSet('dongwaanHolds', state.dongwaanHolds).catch(e=>console.error('save auto holds failed', e));
+}
+function tankValue(line, targetISO, p, ctx){
+  const cfg = resolveLineConfig(line, targetISO);
+  if(INACTIVE_STATUSES.includes(cfg.status)) return 'ว่าง';
+  if(cfg.status==='date_based') return null;
+  if(p > cfg.cycle_length) return 'ว่าง';
+  const anchor = cfg.effective_date || ctx.baseDate;
+  const diff = workdayDiff(anchor, targetISO, line.line_id, ctx);
+  return mod(cfg.base_value + diff - p, cfg.cycle_length) + 1;
+}
+function isPastDongwaan(line, val, targetISO){
+  const cfg = resolveLineConfig(line, targetISO || state.dailyDate);
+  return typeof val === 'number' && cfg.dongwaan_value!=null && val > cfg.dongwaan_value;
+}
+function dongwaanTank(line, targetISO, ctx){
+  const cfg = resolveLineConfig(line, targetISO);
+  if(INACTIVE_STATUSES.includes(cfg.status)) return null;
+  if(cfg.status==='date_based') return null;
+  const anchor = cfg.effective_date || ctx.baseDate;
+  const diff = workdayDiff(anchor, targetISO, line.line_id, ctx);
+  return mod(cfg.base_value + diff - cfg.dongwaan_value, cfg.cycle_length) + 1;
+}
+function activeSoakEntry(lineId, tankNo, targetISO){
+  const entries = state.soakTanks.filter(e=>e.line_id===lineId && e.tank_no===tankNo && e.soak_date<=targetISO);
+  if(!entries.length) return null;
+  entries.sort((a,b)=> b.soak_date.localeCompare(a.soak_date));
+  return entries[0];
+}
+function soakStatus(entry, refISO){
+  if(!entry) return {label:'ว่าง', cls:'empty'};
+  const diff = dayNum(entry.due_date)-dayNum(refISO);
+  if(diff<0) return {label:'เกินกำหนด', cls:'danger'};
+  if(diff<=2) return {label:'ใกล้ครบกำหนด', cls:'warn'};
+  return {label:'ปกติ', cls:'ok'};
+}
+function findActualEntry(dateISO, lineId, tankNo){
+  const matches = state.actualLog.filter(a=>a.date===dateISO && a.line_id===lineId && a.tank_no===tankNo);
+  if(!matches.length) return null;
+  return matches[matches.length-1];
+}
+function findFreezeEntry(dateISO, lineId){
+  return state.lineFreezes.find(f=>f.date===dateISO && f.line_id===lineId) || null;
+}
+function isScheduled(lineId, dateISO, tankNo){
+  return state.weeklySchedule.some(w=>w.line_id===lineId && w.date===dateISO && w.tank_no===tankNo);
+}
+
+/* ===================== Storage (Google Drive) ===================== */
+// TODO: ใส่ Client ID ที่ได้จาก Google Cloud Console (ดูวิธีตั้งค่าที่คอมเมนต์บนสุดของไฟล์)
+const GOOGLE_CLIENT_ID = 'YOUR_CLIENT_ID.apps.googleusercontent.com';
+// TODO: ใส่ File ID ของไฟล์ข้อมูลใน Google Drive (จะได้หลังล็อกอินครั้งแรก — ดูคำแนะนำที่ขึ้นบนหน้าจอ)
+let DRIVE_FILE_ID = '';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
+const DRIVE_FILE_NAME = 'tank-rotation-data.json';
+
+let gTokenClient = null;
+let gAccessToken = null;
+let driveDoc = null;
+let driveReadyResolve = null;
+const driveReady = new Promise(res=>{ driveReadyResolve = res; });
+let driveWriteTimer = null;
+let driveWritePending = false;
+
+function setSaveStatus(mode, text){
+  const el = document.getElementById('save-status');
+  if(!el) return;
+  el.className = 'save-status' + (mode? ' '+mode : '');
+  el.style.display = text ? 'flex' : 'none';
+  el.textContent = text || '';
+}
+
+function initGoogleAuth(){
+  if(typeof google === 'undefined' || !google.accounts){
+    document.getElementById('auth-error').textContent = 'โหลดสคริปต์ Google ไม่สำเร็จ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ตแล้วรีเฟรชหน้านี้';
+    return;
+  }
+  gTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: DRIVE_SCOPE,
+    callback: async (resp)=>{
+      if(resp.error){
+        document.getElementById('auth-error').textContent = 'เข้าสู่ระบบไม่สำเร็จ: ' + resp.error + ' (ตรวจสอบว่าอีเมลนี้ถูกเพิ่มเป็น Test user ใน Google Cloud Console แล้วหรือยัง)';
+        return;
+      }
+      gAccessToken = resp.access_token;
+      document.getElementById('auth-error').textContent = '';
+      document.getElementById('auth-overlay').style.display = 'none';
+      try{
+        await driveLoadDoc();
+        driveReadyResolve();
+        loadAll();
+      }catch(e){
+        console.error('drive init failed', e);
+        document.getElementById('auth-overlay').style.display = 'flex';
+        document.getElementById('auth-error').textContent = 'โหลดข้อมูลจาก Drive ไม่สำเร็จ: ' + e.message;
+      }
+    }
+  });
+}
+
+function signInWithGoogle(){
+  if(GOOGLE_CLIENT_ID.startsWith('YOUR_CLIENT_ID')){
+    document.getElementById('auth-error').textContent = 'ยังไม่ได้ตั้งค่า GOOGLE_CLIENT_ID ในไฟล์นี้ — ดูวิธีตั้งค่าที่คอมเมนต์บนสุดของไฟล์';
+    return;
+  }
+  if(!gTokenClient){ initGoogleAuth(); }
+  if(gTokenClient) gTokenClient.requestAccessToken({prompt: gAccessToken ? '' : 'consent'});
+}
+
+async function driveApiFetch(url, opts){
+  opts = opts || {};
+  const headers = Object.assign({}, opts.headers||{}, {Authorization: 'Bearer ' + gAccessToken});
+  const res = await fetch(url, Object.assign({}, opts, {headers}));
+  if(res.status===401){
+    gAccessToken = null;
+    throw new Error('เซสชันหมดอายุ กรุณาล็อกอินใหม่');
+  }
+  return res;
+}
+
+async function driveLoadDoc(){
+  if(!DRIVE_FILE_ID){
+    const createRes = await driveApiFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=media', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({})
+    });
+    if(!createRes.ok) throw new Error('สร้างไฟล์ไม่สำเร็จ (HTTP '+createRes.status+')');
+    const created = await createRes.json();
+    DRIVE_FILE_ID = created.id;
+    await driveApiFetch('https://www.googleapis.com/drive/v3/files/' + DRIVE_FILE_ID, {
+      method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name: DRIVE_FILE_NAME})
+    });
+    driveDoc = {};
+    document.getElementById('setup-banner').innerHTML =
+      'สร้างไฟล์ข้อมูลใหม่แล้ว — คัดลอก File ID นี้ไปใส่ที่ DRIVE_FILE_ID ในไฟล์ .html แล้วอัปโหลดทับอีกครั้ง: <span class="mono">' + DRIVE_FILE_ID + '</span>';
+    document.getElementById('setup-banner').style.display = 'block';
+    return;
+  }
+  const res = await driveApiFetch('https://www.googleapis.com/drive/v3/files/' + DRIVE_FILE_ID + '?alt=media');
+  if(res.status===404) throw new Error('ไม่พบไฟล์ข้อมูลใน Drive (File ID ไม่ถูกต้อง หรือยังไม่ได้แชร์สิทธิ์ให้บัญชีนี้)');
+  if(!res.ok) throw new Error('โหลดข้อมูลไม่สำเร็จ (HTTP '+res.status+')');
+  const text = await res.text();
+  driveDoc = text ? JSON.parse(text) : {};
+}
+
+function scheduleDriveWrite(){
+  driveWritePending = true;
+  setSaveStatus('saving', 'กำลังบันทึก…');
+  clearTimeout(driveWriteTimer);
+  driveWriteTimer = setTimeout(driveWriteDoc, 800);
+}
+
+async function driveWriteDoc(){
+  if(!DRIVE_FILE_ID || !driveDoc) return;
+  try{
+    const res = await driveApiFetch('https://www.googleapis.com/upload/drive/v3/files/' + DRIVE_FILE_ID + '?uploadType=media', {
+      method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(driveDoc)
+    });
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    driveWritePending = false;
+    setSaveStatus('ok', 'บันทึกแล้ว');
+    setTimeout(function(){ if(!driveWritePending) setSaveStatus('', ''); }, 1800);
+  }catch(e){
+    console.error('drive write failed', e);
+    setSaveStatus('error', 'บันทึกไม่สำเร็จ — ตรวจสอบอินเทอร์เน็ต แล้วจะลองใหม่อัตโนมัติ');
+    driveWriteTimer = setTimeout(driveWriteDoc, 4000);
+  }
+}
+
+async function stGet(key){
+  await driveReady;
+  return (driveDoc && driveDoc[key]!==undefined) ? driveDoc[key] : null;
+}
+async function stSet(key, val){
+  await driveReady;
+  driveDoc[key] = val;
+  scheduleDriveWrite();
+}
+
+window.addEventListener('beforeunload', function(e){
+  if(driveWritePending){ e.preventDefault(); e.returnValue=''; }
+});
+
+/* ===================== Seed data ===================== */
+function seedSettings(){ return {base_date:'2026-09-10', base_date_locked:true}; }
+function seedLines(){
+  return [
+    {line_id:101, base_value:6, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:102, base_value:3, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:103, base_value:6, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:104, base_value:1, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:105, base_value:4, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:106, base_value:1, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:107, base_value:5, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:108, base_value:4, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:109, base_value:5, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:110, base_value:5, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:111, base_value:4, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:112, base_value:5, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:201, base_value:6, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:202, base_value:5, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:203, base_value:2, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:204, base_value:5, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:205, base_value:2, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:206, base_value:1, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:207, base_value:6, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นDip']},
+    {line_id:208, base_value:2, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นDip']},
+    {line_id:209, base_value:null, status:'date_based', cycle_length:5, dongwaan_value:null, fruit_types:['มะม่วง ชิ้นไทย'], has_water_tank:true},
+    {line_id:210, base_value:6, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นDip']},
+    {line_id:211, base_value:6, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นDip']},
+    {line_id:212, base_value:4, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะยม']},
+    {line_id:213, base_value:3, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย']},
+    {line_id:214, base_value:5, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นDip']},
+    {line_id:301, base_value:5, status:'normal', cycle_length:6, dongwaan_value:6, fruit_types:['กระท้อน']},
+    {line_id:302, base_value:3, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะกอกน้ำ']},
+    {line_id:303, base_value:3, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะกอกฝรั่ง']},
+    {line_id:304, base_value:3, status:'normal', cycle_length:5, dongwaan_value:5, fruit_types:['กระท้อน']},
+    {line_id:401, base_value:1, status:'normal', cycle_length:6, dongwaan_value:6, fruit_types:['องุ่น']},
+    {line_id:402, base_value:5, status:'normal', cycle_length:6, dongwaan_value:6, fruit_types:['องุ่น']},
+    {line_id:403, base_value:2, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะดัน']},
+    {line_id:404, base_value:4, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะปราง']},
+    {line_id:405, base_value:3, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะขาม']},
+    {line_id:406, base_value:1, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะขาม']},
+    {line_id:407, base_value:1, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นไทย','มะดัน']},
+    {line_id:408, base_value:5, status:'normal', cycle_length:6, dongwaan_value:5, fruit_types:['มะม่วง ชิ้นเดี่ยว']}
+  ];
+}
+function seedHolidays(){ return [{_id:crypto.randomUUID(), date:'2026-10-13', note:'วันคล้ายวันสวรรคต ร.9'}]; }
+function seedSundayExceptions(){ return []; }
+function seedLineFreezes(){ return []; }
+function seedSoakTanks(){
+  return [
+    {_id:crypto.randomUUID(), line_id:209, tank_no:1, product_lot:'LOT-A1', soak_date:'2026-09-05', due_date:'2026-09-20'},
+    {_id:crypto.randomUUID(), line_id:209, tank_no:2, product_lot:'LOT-A2', soak_date:'2026-08-30', due_date:'2026-09-15'}
+  ];
+}
+function seedActualLog(){ return []; }
+function seedInspectionNotes(){ return []; }
+function seedWeeklySchedule(){ return []; }
+function seedDongwaanHolds(){ return []; }
+
+/* ===================== App state ===================== */
+const state = {
+  settings:null, lines:[], holidays:[], sundayExceptions:[], lineFreezes:[], soakTanks:[], actualLog:[], inspectionNotes:[], weeklySchedule:[], dongwaanHolds:[],
+  activeTab:'daily', dailyDate:todayISO(), weeklyDate:todayISO(), dailyOpenEntry:null, dailyOpenHold:null, dailyOpenCheckForm:null, expandedLines:{}, actualOnlyMismatch:true, loaded:false
+};
+
+const LINES_DATA_VERSION = '2026-09-10-real-lines-v1';
+
+async function loadAll(){
+  const [settings, lines, holidays, sundayExceptions, lineFreezes, soakTanks, actualLog, inspectionNotes, weeklySchedule, dongwaanHolds, linesDataVersion] = await Promise.all([
+    stGet('settings'), stGet('lines'), stGet('holidays'), stGet('sundayExceptions'),
+    stGet('lineFreezes'), stGet('soakTanks'), stGet('actualLog'), stGet('inspectionNotes'), stGet('weeklySchedule'), stGet('dongwaanHolds'), stGet('linesDataVersion')
+  ]);
+  const needsLineRefresh = linesDataVersion !== LINES_DATA_VERSION;
+  state.settings = (!needsLineRefresh && settings) ? settings : seedSettings();
+  state.lines = (!needsLineRefresh && lines) ? lines : seedLines();
+  state.holidays = holidays || seedHolidays();
+  state.sundayExceptions = sundayExceptions || seedSundayExceptions();
+  state.lineFreezes = lineFreezes || seedLineFreezes();
+  state.soakTanks = soakTanks || seedSoakTanks();
+  state.actualLog = actualLog || seedActualLog();
+  state.inspectionNotes = inspectionNotes || seedInspectionNotes();
+  state.weeklySchedule = weeklySchedule || seedWeeklySchedule();
+  state.dongwaanHolds = dongwaanHolds || seedDongwaanHolds();
+  if(needsLineRefresh){
+    stSet('settings', state.settings);
+    stSet('lines', state.lines);
+    stSet('linesDataVersion', LINES_DATA_VERSION);
+  }
+  if(!holidays) stSet('holidays', state.holidays);
+  if(!sundayExceptions) stSet('sundayExceptions', state.sundayExceptions);
+  if(!lineFreezes) stSet('lineFreezes', state.lineFreezes);
+  if(!soakTanks) stSet('soakTanks', state.soakTanks);
+  if(!actualLog) stSet('actualLog', state.actualLog);
+  if(!inspectionNotes) stSet('inspectionNotes', state.inspectionNotes);
+  if(!weeklySchedule) stSet('weeklySchedule', state.weeklySchedule);
+  if(!dongwaanHolds) stSet('dongwaanHolds', state.dongwaanHolds);
+  state.loaded = true;
+  ensureAutoHolds();
+  render();
+}
+
+/* ===================== Tab renderers ===================== */
+function renderDaily(){
+  ensureAutoHolds();
+  const ctx = buildCtx();
+  const date = state.dailyDate;
+  const rows = state.lines.slice().sort((a,b)=>a.line_id-b.line_id).map(line=>{
+    const cfg = resolveLineConfig(line, date);
+    let tanksHtml;
+    if(cfg.status==='date_based'){
+      let chips='';
+      for(let t=1;t<=cfg.cycle_length;t++){
+        const entry = activeSoakEntry(line.line_id, t, date);
+        const st = soakStatus(entry, date);
+        chips += `<div class="tank tank-soak ${st.cls}">
+          <div class="tank-no">ถัง ${t}</div>
+          <div class="tank-val">${entry? esc(entry.product_lot): 'ว่าง'}</div>
+          <div class="tank-tag">${st.label}</div>
+        </div>`;
+      }
+      if(line.has_water_tank !== false){
+        chips += `<div class="tank tank-water"><div class="tank-no">ถังผสมน้ำ</div><div class="tank-val">คงที่</div></div>`;
+      }
+      tanksHtml = `<div class="tank-row">${chips}</div>`;
+    } else {
+      const dueDate = date;
+      const dong = dongwaanTank(line, dueDate, ctx);
+      let chips='';
+      for(let p=1;p<=6;p++){
+        const val = tankValue(line, date, p, ctx);
+        const isDong = (p===dong) && val!=='ว่าง';
+        const isEmpty = val==='ว่าง';
+        const overflowEmpty = !isEmpty && !isDong && isPastDongwaan(line, val, date);
+        const entry = isEmpty? null: findActualEntry(date, line.line_id, p);
+        const isOpen = state.dailyOpenEntry===`${line.line_id}-${p}`;
+        let actualBadge = '';
+        if(entry){
+          const matches = Number(entry.actual_value)===Number(val);
+          actualBadge = `<div class="tank-actual ${matches?'ok':'danger'}">จริง ${entry.actual_value}</div>`;
+        }
+        let dongClass = '', tankTagLabel = '', checkButtons = '', holdNoteHtml = '', dueDateHtml = '';
+        if(isDong){
+          const hold = findHoldForLineOnDate(line.line_id, dueDate);
+          const status = hold? hold.status : 'pending';
+          const effectiveDue = hold? hold.since_date : dueDate;
+          if(status==='pass'){ dongClass='tank-pass'; tankTagLabel='ผ่านขึ้นบรรจุ'; }
+          else if(status==='conditional'){ dongClass='tank-conditional'; tankTagLabel='ผ่านแบบมีเงื่อนไข'; }
+          else if(status==='fail'){ dongClass='tank-fail'; tankTagLabel='ไม่ผ่านขึ้นบรรจุ'; }
+          else { dongClass='tank-dong'; tankTagLabel='เตรียมขึ้นบรรจุ'; }
+          const isOpenHold = !hold || hold.resolved_date==null;
+          dueDateHtml = `<div class="tank-due-text">กำหนด ${effectiveDue.slice(8,10)}/${effectiveDue.slice(5,7)}</div>`;
+          checkButtons = `<div class="tank-check">
+            <button type="button" class="chk-btn pass ${status==='pass'?'active':''}" title="ผ่านขึ้นบรรจุ" onclick="event.stopPropagation(); APP.resolveDongwaanHold(${line.line_id},${p},'pass')">✓</button>
+            <button type="button" class="chk-btn conditional ${status==='conditional'?'active':''}" title="ผ่านแบบมีเงื่อนไข" onclick="event.stopPropagation(); APP.openCheckNoteForm(${line.line_id},${p},'conditional')">~</button>
+            <button type="button" class="chk-btn fail ${status==='fail'?'active':''}" title="ไม่ผ่านขึ้นบรรจุ" onclick="event.stopPropagation(); APP.openCheckNoteForm(${line.line_id},${p},'fail')">✕</button>
+          </div>`;
+          if(isOpenHold && hold){
+            checkButtons += `<button type="button" class="chk-release" onclick="event.stopPropagation(); APP.releaseDongwaanHold(${line.line_id})">ปลดสถานะ</button>`;
+          }
+          if(hold && hold.note){
+            holdNoteHtml = `<div class="tank-note-text">${esc(hold.note)}</div>`;
+          }
+        } else if(overflowEmpty){
+          dongClass = 'tank-overflow';
+          tankTagLabel = 'ถังว่าง';
+        } else if(!isEmpty){
+          tankTagLabel = 'ดองหวาน';
+        }
+        chips += `<div class="tank ${dongClass} ${isEmpty?'tank-empty':''} ${isEmpty?'':'tank-clickable'} ${isOpen?'tank-open':''}"
+              ${isEmpty? '': `onclick="APP.toggleDailyEntry(${line.line_id},${p})"`}>
+          <div class="tank-no">ถัง ${p}</div>
+          <div class="tank-val">${val}</div>
+          ${tankTagLabel? `<div class="tank-tag">${tankTagLabel}</div>`:''}
+          ${dueDateHtml}
+          ${holdNoteHtml}
+          ${checkButtons}
+          ${actualBadge}
+        </div>`;
+      }
+      tanksHtml = `<div class="tank-row">${chips}</div>`;
+      if(state.dailyOpenEntry && state.dailyOpenEntry.startsWith(line.line_id+'-')){
+        const p = Number(state.dailyOpenEntry.split('-')[1]);
+        const existing = findActualEntry(date, line.line_id, p);
+        tanksHtml += `<form class="quick-entry" onsubmit="APP.saveDailyActual(event, ${line.line_id}, ${p})">
+          <span class="quick-entry-label">บันทึกข้อมูลจริง — ไลน์ ${line.line_id} ถัง ${p} วันที่ <span class="mono">${date}</span></span>
+          <input type="number" name="actual_value" min="1" max="6" placeholder="ค่าที่พบจริง" value="${existing? existing.actual_value:''}" required autofocus>
+          <input type="text" name="note" placeholder="หมายเหตุ" value="${existing? esc(existing.note||''):''}">
+          <button type="submit">บันทึก</button>
+          ${existing? `<button type="button" class="btn-del" onclick="APP.deleteDailyActual(event,'${existing._id}')">ลบ</button>`:''}
+          <button type="button" class="btn-cancel" onclick="APP.toggleDailyEntry(${line.line_id},${p})">ปิด</button>
+        </form>`;
+      }
+      if(state.dailyOpenCheckForm && state.dailyOpenCheckForm.lineId===line.line_id){
+        const { tankNo, action } = state.dailyOpenCheckForm;
+        const label = action==='fail' ? 'ระบุเหตุผลที่ไม่ผ่านขึ้นบรรจุ' : 'ระบุเงื่อนไขการผ่าน';
+        tanksHtml += `<form class="quick-entry" onsubmit="APP.submitCheckNote(event, ${line.line_id}, ${tankNo}, '${action}')">
+          <span class="quick-entry-label">${label} — ไลน์ ${line.line_id} ถัง ${tankNo} (กำหนดขึ้นบรรจุ <span class="mono">${dueDate}</span>)</span>
+          <input type="text" name="note" placeholder="หมายเหตุ" required autofocus>
+          <button type="submit">บันทึก</button>
+          <button type="button" class="btn-cancel" onclick="APP.closeCheckNoteForm()">ปิด</button>
+        </form>`;
+      }
+    }
+    let holdControl = '';
+    let holdForm = '';
+    let holdNoteBlock = '';
+    let confirmBtn = '';
+    if(cfg.status==='normal'){
+      let mismatchCount = 0;
+      for(let p=1;p<=cfg.cycle_length;p++){
+        const val = tankValue(line, date, p, ctx);
+        if(val==='ว่าง') continue;
+        const entry = findActualEntry(date, line.line_id, p);
+        if(!entry || Number(entry.actual_value)!==Number(val)) mismatchCount++;
+      }
+      if(mismatchCount>0){
+        confirmBtn = `<button type="button" class="btn-confirm-plan" onclick="APP.confirmLinePlan(${line.line_id})">ยืนยันตรงตามแผน (${mismatchCount} ถัง)</button>`;
+      }
+      const heldEntry = findFreezeEntry(date, line.line_id);
+      const holdOpen = state.dailyOpenHold===line.line_id;
+      if(heldEntry){
+        holdControl = `<button class="btn-hold held" onclick="APP.removeDailyHold(${line.line_id})">กำลัง Hold — ยกเลิก</button>`;
+        if(heldEntry.reason){
+          holdNoteBlock = `<div class="hold-note-text">เหตุผล Hold: ${esc(heldEntry.reason)}</div>`;
+        }
+      } else {
+        holdControl = `<button class="btn-hold ${holdOpen?'active':''}" onclick="APP.toggleDailyHold(${line.line_id})">Hold</button>`;
+      }
+      if(holdOpen && !heldEntry){
+        holdForm = `<form class="quick-entry quick-hold" onsubmit="APP.saveDailyHold(event, ${line.line_id})">
+          <span class="quick-entry-label">หยุดหมุนเวียนไลน์ ${line.line_id} วันที่ <span class="mono">${date}</span> (ถังค้างตำแหน่งเดิมอีก 1 วัน)</span>
+          <input type="text" name="reason" placeholder="สาเหตุ (ไม่บังคับ)">
+          <button type="submit">ยืนยัน Hold</button>
+          <button type="button" class="btn-cancel" onclick="APP.toggleDailyHold(${line.line_id})">ปิด</button>
+        </form>`;
+      }
+    }
+    return `<div class="line-card">
+      <div class="line-head">
+        <div class="line-id">ไลน์ ${line.line_id}</div>
+        <div class="line-meta">
+          <span class="badge badge-${cfg.status}">${STATUS_LABEL[cfg.status]}</span>
+          ${line.fruit_types.map(f=>`<span class="fruit-tag">${esc(f)}</span>`).join('')}
+        </div>
+        ${(confirmBtn || holdControl)? `<div class="line-hold">${confirmBtn}${holdControl}</div>`:''}
+      </div>
+      ${holdNoteBlock}
+      ${tanksHtml}
+      ${holdForm}
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="toolbar">
+      <label>วันที่ <input type="date" value="${date}" onchange="APP.setDailyDate(this.value)"></label>
+      <div class="toolbar-hint">ตั้งค่าไลน์อ้างอิงวันฐาน: <span class="mono">${state.settings.base_date}</span> <button type="button" class="link-btn" onclick="APP.setTab('lines')">ไปหน้าตั้งค่าไลน์</button></div>
+    </div>
+    <div class="lines-grid">${rows || '<div class="empty-row">ยังไม่มีไลน์ในระบบ</div>'}</div>
+  `;
+}
+
+function renderWeekly(){
+  const monday = mondayOf(state.weeklyDate);
+  const days = Array.from({length:7},(_,i)=>addDays(monday,i));
+  const dayLabels=['จ','อ','พ','พฤ','ศ','ส','อา'];
+  const header = `<tr><th>ไลน์</th>${days.map((d,i)=>`<th>${dayLabels[i]}<br><span class="mono small">${d.slice(5)}</span></th>`).join('')}</tr>`;
+  const bodyRows = state.lines.slice().sort((a,b)=>a.line_id-b.line_id).map(line=>{
+    const cells = days.map(d=>{
+      const dcfg = resolveLineConfig(line, d);
+      if(dcfg.status==='temporarily_idle') return `<td class="cell-empty">ว่าง</td>`;
+      if(dcfg.status==='opening') return `<td class="cell-empty">เปิดไลน์ใหม่</td>`;
+      if(dcfg.status==='closing') return `<td class="cell-empty">กำลังปิดไลน์</td>`;
+      if(dcfg.status==='date_based') return `<td class="cell-soak">ถังแช่</td>`;
+      let chips='';
+      for(let t=1;t<=dcfg.cycle_length;t++){
+        const active = isScheduled(line.line_id, d, t);
+        chips += `<button type="button" class="wk-tank ${active?'active':''}" onclick="APP.toggleWeeklySchedule(${line.line_id}, '${d}', ${t})" title="ถัง ${t} — ${active? 'กำหนดขึ้นบรรจุ (เวียนน้ำตามปกติ)' : 'ไม่ได้กำหนด (หยุดเวียนน้ำ)'}">${t}</button>`;
+      }
+      return `<td class="cell-schedule"><div class="wk-tank-grid">${chips}</div></td>`;
+    }).join('');
+    return `<tr><td class="line-id-cell">${line.line_id}</td>${cells}</tr>`;
+  }).join('');
+  return `
+   <div class="toolbar">
+     <label>เลือกวันในสัปดาห์ <input type="date" value="${state.weeklyDate}" onchange="APP.setWeeklyDate(this.value)"></label>
+     <div class="toolbar-hint">สัปดาห์ของวันที่ <span class="mono">${monday}</span> ถึง <span class="mono">${days[6]}</span></div>
+   </div>
+   <div class="toolbar">
+     <span class="legend-item"><span class="legend-dot active"></span> กำหนดขึ้นบรรจุ — เวียนน้ำตามปกติ</span>
+     <span class="legend-item"><span class="legend-dot"></span> ไม่ได้กำหนด — หยุดเวียนน้ำ</span>
+     <span class="toolbar-hint">คลิกที่หมายเลขถังในแต่ละวันเพื่อกำหนด/ยกเลิกกำหนดขึ้นบรรจุของถังนั้น</span>
+   </div>
+   <div class="table-scroll">
+     <table class="weekly-table"><thead>${header}</thead><tbody>${bodyRows || ''}</tbody></table>
+   </div>
+  `;
+}
+
+function renderSoak(){
+  const dateBasedLines = state.lines.filter(l=>l.status==='date_based');
+  const rows = state.soakTanks.slice()
+    .sort((a,b)=> a.line_id-b.line_id || a.tank_no-b.tank_no || b.soak_date.localeCompare(a.soak_date))
+    .map(e=>{
+      const st = soakStatus(e, todayISO());
+      return `<tr>
+        <td>${e.line_id}</td><td>${e.tank_no}</td><td>${esc(e.product_lot)}</td>
+        <td class="mono">${e.soak_date}</td><td class="mono">${e.due_date}</td>
+        <td><span class="status-pill ${st.cls}">${st.label}</span></td>
+        <td><button class="btn-del" onclick="APP.deleteSoak('${e._id}')">ลบ</button></td>
+      </tr>`;
+    }).join('');
+  const lineOptions = dateBasedLines.map(l=>`<option value="${l.line_id}">ไลน์ ${l.line_id}</option>`).join('');
+  return `
+   <div class="panel">
+     <h3>เพิ่มรายการถังแช่</h3>
+     <form class="inline-form" onsubmit="APP.addSoak(event)">
+       <select name="line_id" required>${lineOptions || '<option disabled>ไม่มีไลน์ระบบวันที่</option>'}</select>
+       <select name="tank_no" required>${[1,2,3,4,5].map(t=>`<option value="${t}">ถัง ${t}</option>`).join('')}</select>
+       <input name="product_lot" placeholder="ล็อตสินค้า" required>
+       <label>ลงแช่ <input type="date" name="soak_date" required></label>
+       <label>กำหนดขึ้น <input type="date" name="due_date" required></label>
+       <button type="submit">เพิ่ม</button>
+     </form>
+   </div>
+   <table class="data-table">
+     <thead><tr><th>ไลน์</th><th>ถัง</th><th>ล็อต</th><th>วันที่ลงแช่</th><th>กำหนดขึ้น</th><th>สถานะ</th><th></th></tr></thead>
+     <tbody>${rows || '<tr><td colspan="7" class="empty-row">ยังไม่มีรายการ</td></tr>'}</tbody>
+   </table>
+  `;
+}
+
+function renderActual(){
+  const ctx = buildCtx();
+  const today = todayISO();
+  const lineOptions = state.lines.slice().sort((a,b)=>a.line_id-b.line_id).map(l=>`<option value="${l.line_id}">ไลน์ ${l.line_id}</option>`).join('');
+
+  const allRows = state.actualLog.slice().sort((a,b)=> b.date.localeCompare(a.date)).map(e=>{
+    const line = state.lines.find(l=>l.line_id===e.line_id);
+    const ecfg = line ? resolveLineConfig(line, e.date) : null;
+    let planned='—', match='ไม่ระบุ', cls='neutral';
+    if(line && ecfg.status==='normal'){
+      planned = tankValue(line, e.date, e.tank_no, ctx);
+      if(planned==='ว่าง'){ match='ว่าง (ไม่มีค่าตามแผน)'; cls='neutral'; }
+      else if(Number(planned)===Number(e.actual_value)){ match='ตรงตามแผน'; cls='ok'; }
+      else { match='ไม่ตรงตามแผน'; cls='danger'; }
+    } else if(line && INACTIVE_STATUSES.includes(ecfg.status)){
+      planned='ว่าง';
+      match = ecfg.status==='temporarily_idle' ? 'ไลน์ว่างชั่วคราว' : (ecfg.status==='opening' ? 'ไลน์กำลังเปิดใหม่' : 'ไลน์กำลังปิด');
+      cls='neutral';
+    } else {
+      planned='—'; match='ไลน์ระบบวันที่ (ไม่เทียบแผน)'; cls='neutral';
+    }
+    return {e, planned, match, cls};
+  });
+  const shownRows = state.actualOnlyMismatch ? allRows.filter(r=>r.cls!=='ok') : allRows;
+  const rows = shownRows.map(({e, planned, match, cls})=>`<tr>
+      <td class="mono">${e.date}</td><td>${e.line_id}</td><td>${e.tank_no}</td>
+      <td class="mono">${planned}</td><td class="mono">${e.actual_value}</td>
+      <td><span class="status-pill ${cls}">${match}</span></td>
+      <td>${esc(e.note||'')}</td>
+      <td><button class="btn-del" onclick="APP.deleteActual('${e._id}')">ลบ</button></td>
+    </tr>`).join('');
+
+  /* ---- Exceptions / anomalies ---- */
+  const anomalies = [];
+  for(const h of state.dongwaanHolds){
+    const line = state.lines.find(l=>l.line_id===h.line_id);
+    const lineLabel = `ไลน์ ${h.line_id}`;
+    if(h.status==='pending' && h.since_date<=today){
+      anomalies.push({cat:'ไม่ได้ส่งตรวจ', cls:'neutral', line:lineLabel, tank:h.tank_no, date:h.since_date, note:'ถึงกำหนดขึ้นบรรจุแล้วแต่ยังไม่ได้ส่งตรวจ'});
+    }
+    if(h.status==='fail' && h.resolved_date==null){
+      anomalies.push({cat:'ไม่ขึ้นบรรจุตามแผน', cls:'danger', line:lineLabel, tank:h.tank_no, date:h.since_date, note: h.note || 'ตรวจไม่ผ่าน ยังไม่ปลดสถานะ'});
+    }
+    if(cmpISO(h.since_date, addDays(today,1)) > 0){
+      anomalies.push({cat:'ตรวจถังเบิ้ลล่วงหน้า', cls:'warn', line:lineLabel, tank:h.tank_no, date:h.since_date, note:'กำหนดขึ้นบรรจุล่วงหน้าเกิน 1 วันจากปกติ'});
+    }
+  }
+  for(const e of state.actualLog){
+    const line = state.lines.find(l=>l.line_id===e.line_id);
+    if(!line || resolveLineConfig(line, e.date).status!=='normal') continue;
+    const dongP = dongwaanTank(line, e.date, ctx);
+    if(dongP!==e.tank_no) continue;
+    const planned = tankValue(line, e.date, e.tank_no, ctx);
+    if(planned!=='ว่าง' && Number(planned)!==Number(e.actual_value)){
+      anomalies.push({cat:'ขึ้นบรรจุไม่หมดถัง', cls:'danger', line:`ไลน์ ${e.line_id}`, tank:e.tank_no, date:e.date, note:`บันทึกจริง ${e.actual_value} (แผน ${planned})`});
+    }
+  }
+  anomalies.sort((a,b)=> b.date.localeCompare(a.date));
+  const anomalyRows = anomalies.map(a=>`<tr>
+      <td><span class="status-pill ${a.cls}">${a.cat}</span></td>
+      <td>${a.line}</td><td>${a.tank}</td><td class="mono">${a.date}</td><td>${esc(a.note)}</td>
+    </tr>`).join('');
+
+  return `
+   <div class="toolbar">
+     <div class="toolbar-hint">ค่าตามแผนคำนวณจากตั้งค่าไลน์ที่อ้างอิงวันฐาน: <span class="mono">${state.settings.base_date}</span> <button type="button" class="link-btn" onclick="APP.setTab('lines')">ไปหน้าตั้งค่าไลน์</button></div>
+   </div>
+   <div class="panel">
+     <h3>รายการผิดปกติ</h3>
+     <p class="hint-text">รวมรายการ: ไม่ได้ส่งตรวจ / ไม่ขึ้นบรรจุตามแผน / ขึ้นบรรจุไม่หมดถัง / ตรวจถังเบิ้ลล่วงหน้า</p>
+     <table class="data-table">
+       <thead><tr><th>ประเภท</th><th>ไลน์</th><th>ถัง</th><th>วันที่</th><th>รายละเอียด</th></tr></thead>
+       <tbody>${anomalyRows || '<tr><td colspan="5" class="empty-row">ไม่พบรายการผิดปกติ</td></tr>'}</tbody>
+     </table>
+   </div>
+   <div class="panel">
+     <h3>บันทึกข้อมูลจริง</h3>
+     <form class="inline-form" onsubmit="APP.addActual(event)">
+       <label>วันที่ <input type="date" name="date" required value="${todayISO()}"></label>
+       <select name="line_id" required>${lineOptions}</select>
+       <select name="tank_no" required>${[1,2,3,4,5,6].map(t=>`<option value="${t}">ถัง ${t}</option>`).join('')}</select>
+       <input name="actual_value" type="number" min="1" max="6" placeholder="ค่าที่พบจริง" required>
+       <input name="note" placeholder="หมายเหตุ">
+       <button type="submit">บันทึก</button>
+     </form>
+     <label class="chip-check"><input type="checkbox" ${state.actualOnlyMismatch?'checked':''} onchange="APP.toggleActualOnlyMismatch()"> แสดงเฉพาะรายการที่ไม่ตรงตามแผน</label>
+   </div>
+   <table class="data-table">
+     <thead><tr><th>วันที่</th><th>ไลน์</th><th>ถัง</th><th>ค่าตามแผน</th><th>ค่าจริง</th><th>สถานะ</th><th>หมายเหตุ</th><th></th></tr></thead>
+     <tbody>${rows || `<tr><td colspan="8" class="empty-row">${state.actualOnlyMismatch? 'ไม่มีรายการที่ไม่ตรงตามแผน':'ยังไม่มีข้อมูล'}</td></tr>`}</tbody>
+   </table>
+  `;
+}
+
+function renderEvents(){
+  const holidayRows = state.holidays.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(h=>`
+    <tr><td class="mono">${h.date}</td><td>${esc(h.note||'')}</td><td><button class="btn-del" onclick="APP.deleteHoliday('${h._id}')">ลบ</button></td></tr>`).join('');
+  const sundayRows = state.sundayExceptions.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(s=>`
+    <tr><td class="mono">${s.date}</td><td>${esc(s.note||'')}</td><td><button class="btn-del" onclick="APP.deleteSunday('${s._id}')">ลบ</button></td></tr>`).join('');
+  const freezeRows = state.lineFreezes.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(f=>`
+    <tr><td>${f.line_id}</td><td class="mono">${f.date}</td><td>${esc(f.reason||'')}</td><td><button class="btn-del" onclick="APP.deleteFreeze('${f._id}')">ลบ</button></td></tr>`).join('');
+  const lineOptions = state.lines.slice().sort((a,b)=>a.line_id-b.line_id).map(l=>`<option value="${l.line_id}">ไลน์ ${l.line_id}</option>`).join('');
+  return `
+   <div class="panel">
+     <h3>วันหยุดบริษัท</h3>
+     <form class="inline-form" onsubmit="APP.addHoliday(event)">
+       <input type="date" name="date" required><input name="note" placeholder="หมายเหตุ"><button type="submit">เพิ่ม</button>
+     </form>
+     <table class="data-table"><thead><tr><th>วันที่</th><th>หมายเหตุ</th><th></th></tr></thead>
+       <tbody>${holidayRows || '<tr><td colspan="3" class="empty-row">ไม่มีข้อมูล</td></tr>'}</tbody></table>
+   </div>
+   <div class="panel">
+     <h3>วันอาทิตย์ที่ทำงานปกติ</h3>
+     <form class="inline-form" onsubmit="APP.addSunday(event)">
+       <input type="date" name="date" required><input name="note" placeholder="หมายเหตุ"><button type="submit">เพิ่ม</button>
+     </form>
+     <table class="data-table"><thead><tr><th>วันที่</th><th>หมายเหตุ</th><th></th></tr></thead>
+       <tbody>${sundayRows || '<tr><td colspan="3" class="empty-row">ไม่มีข้อมูล</td></tr>'}</tbody></table>
+   </div>
+   <div class="panel">
+     <h3>วันที่ไลน์ไม่ได้ขึ้นบรรจุ (Line Freeze)</h3>
+     <form class="inline-form" onsubmit="APP.addFreeze(event)">
+       <select name="line_id" required>${lineOptions}</select>
+       <input type="date" name="date" required><input name="reason" placeholder="สาเหตุ"><button type="submit">เพิ่ม</button>
+     </form>
+     <table class="data-table"><thead><tr><th>ไลน์</th><th>วันที่</th><th>สาเหตุ</th><th></th></tr></thead>
+       <tbody>${freezeRows || '<tr><td colspan="4" class="empty-row">ไม่มีข้อมูล</td></tr>'}</tbody></table>
+   </div>
+  `;
+}
+
+function renderLines(){
+  const statusOptions = (sel)=> Object.entries(STATUS_LABEL).map(([k,v])=>`<option value="${k}" ${k===sel?'selected':''}>${v}</option>`).join('');
+  const fruitCheckboxes = (selected)=> FRUITS.map(f=>`<label class="chip-check"><input type="checkbox" value="${esc(f)}" ${selected.includes(f)?'checked':''}>${esc(f)}</label>`).join('');
+
+  const rows = state.lines.slice().sort((a,b)=>a.line_id-b.line_id).map(l=>{
+    const todayCfg = resolveLineConfig(l, todayISO());
+    const isDB = todayCfg.status==='date_based';
+    const expanded = !!state.expandedLines[l.line_id];
+    const summaryDetail = isDB
+      ? `ถังแช่ · N=${todayCfg.cycle_length}${l.has_water_tank!==false? ' · มีถังผสมน้ำ':''}`
+      : `N=${todayCfg.cycle_length} · เริ่ม ${todayCfg.base_value ?? '-'} · ดองหวาน ${todayCfg.dongwaan_value ?? '-'}`;
+    const fruitSummary = l.fruit_types.length? l.fruit_types.join(', ') : 'ยังไม่ระบุผลไม้';
+    const hist = (l.config_history || []).slice().sort((a,b)=> b.effective_date.localeCompare(a.effective_date));
+    const histRows = hist.map(h=> `<tr>
+        <td class="mono">${h.effective_date}</td>
+        <td>${STATUS_LABEL[h.status]||h.status}</td>
+        <td class="mono">${h.cycle_length ?? '-'}</td>
+        <td class="mono">${h.base_value ?? '-'}</td>
+        <td class="mono">${h.dongwaan_value ?? '-'}</td>
+        <td>${esc(h.note||'')}</td>
+        <td><button type="button" class="btn-del" onclick="APP.deleteLineConfigChange(${l.line_id},'${h._id}')">ลบ</button></td>
+      </tr>`).join('');
+
+    const detailHtml = expanded ? `
+      <div class="line-detail">
+        <p class="hint-text">ค่าด้านล่างนี้คือ "ค่าเริ่มต้น" ของไลน์ — ใช้เฉพาะช่วงที่ยังไม่มีการเปลี่ยนแปลงตามวันที่ในตาราง "ประวัติการเปลี่ยนแปลงการตั้งค่า" ด้านล่างสุด ถ้าต้องการเปลี่ยนการตั้งค่าจากวันใดวันหนึ่งโดยไม่กระทบวันก่อนหน้า ให้เพิ่มรายการในตารางประวัติแทนการแก้ค่าตรงนี้</p>
+        <div class="line-edit-row">
+          <div class="field">
+            <label>สถานะ</label>
+            <select class="f-status" onchange="APP.toggleDateBasedFields(this)">${statusOptions(l.status)}</select>
+          </div>
+          <div class="field">
+            <label>จำนวนถังหมุนเวียน (N)</label>
+            <input type="number" class="f-cycle_length" inputmode="numeric" min="1" max="6" step="1" value="${l.cycle_length}">
+            <span class="field-hint">กรอกได้ 1–6</span>
+          </div>
+          <div class="field only-normal" style="${isDB?'display:none':''}">
+            <label>ค่าเริ่มถัง 1 (ณ วันฐาน)</label>
+            <input type="number" class="f-base_value" inputmode="numeric" min="1" max="6" step="1" placeholder="1–N" value="${l.base_value ?? ''}">
+            <span class="field-hint">1 ถึงจำนวนถัง (N)</span>
+          </div>
+          <div class="field only-normal" style="${isDB?'display:none':''}">
+            <label>ค่าดองหวาน / ขึ้นบรรจุ</label>
+            <input type="number" class="f-dongwaan_value" inputmode="numeric" min="1" max="6" step="1" placeholder="1–N" value="${l.dongwaan_value ?? ''}">
+            <span class="field-hint">1 ถึงจำนวนถัง (N)</span>
+          </div>
+        </div>
+        <p class="hint-text only-datebased-hint" style="${isDB?'':'display:none'}">ไลน์นี้ใช้ระบบวันที่ — ไม่ต้องกรอกค่าเริ่มถัง/ค่าดองหวาน จัดการล็อตแช่ได้ที่หน้า "ถังแช่"</p>
+        <div class="field only-datebased-field" style="${isDB?'':'display:none'}">
+          <label>ถังผสมน้ำ</label>
+          <label class="chip-check"><input type="checkbox" class="f-has_water_tank" ${l.has_water_tank!==false?'checked':''}> ไลน์นี้มีถังผสมน้ำ (คงที่)</label>
+        </div>
+        <div class="field">
+          <label>ชนิดผลไม้</label>
+          <div class="fruit-picker">${fruitCheckboxes(l.fruit_types)}</div>
+        </div>
+        <div class="line-edit-actions">
+          <button class="btn-save" onclick="APP.saveLine(${l.line_id}, this)">บันทึก</button>
+          <button class="btn-del" onclick="APP.deleteLine(${l.line_id})">ลบไลน์</button>
+        </div>
+        <div class="config-history-section">
+          <h4>ประวัติการเปลี่ยนแปลงการตั้งค่า</h4>
+          <p class="hint-text">ใช้ตรงนี้เมื่อการตั้งค่าไลน์เปลี่ยนไประหว่างทาง เช่น เปิดไลน์ที่เคยว่างขึ้นใหม่ตั้งแต่วันหนึ่ง หรือเปลี่ยนถังที่ขึ้นบรรจุจากถัง 5 เป็นถัง 6 ตั้งแต่วันหนึ่ง — วันก่อนหน้าวันที่ระบุจะยังคำนวณด้วยค่าเดิมเหมือนเดิมทุกประการ</p>
+          ${hist.length? `<table class="data-table"><thead><tr><th>มีผลตั้งแต่</th><th>สถานะ</th><th>N</th><th>เริ่มถัง 1</th><th>ดองหวาน</th><th>หมายเหตุ</th><th></th></tr></thead><tbody>${histRows}</tbody></table>` : ''}
+          <form class="line-edit-row config-history-form" onsubmit="APP.addLineConfigChange(event, ${l.line_id})">
+            <div class="field">
+              <label>มีผลตั้งแต่วันที่</label>
+              <input type="date" name="effective_date" class="chf-date" required onchange="APP.suggestConfigBaseValue(${l.line_id}, this)">
+            </div>
+            <div class="field">
+              <label>สถานะ</label>
+              <select name="status">${statusOptions('normal')}</select>
+            </div>
+            <div class="field">
+              <label>จำนวนถังหมุนเวียน (N)</label>
+              <input type="number" name="cycle_length" min="1" max="6" step="1" value="${l.cycle_length}">
+            </div>
+            <div class="field">
+              <label>ค่าเริ่มถัง 1 (ณ วันที่มีผล)</label>
+              <input type="number" name="base_value" class="chf-base" min="1" max="6" step="1" value="${l.base_value ?? 1}">
+              <span class="field-hint">ถ้าต้องการให้ถังต่อเนื่องจากเดิม เลือกวันที่ก่อน ระบบจะคำนวณเลขนี้ให้อัตโนมัติ</span>
+            </div>
+            <div class="field">
+              <label>ค่าดองหวาน/ขึ้นบรรจุ</label>
+              <input type="number" name="dongwaan_value" min="1" max="6" step="1" value="${l.dongwaan_value ?? 1}">
+            </div>
+            <div class="field">
+              <label>บันทึกย่อ</label>
+              <input type="text" name="note" placeholder="เช่น เปิดไลน์ใหม่ เพิ่ม 1 ถัง">
+            </div>
+            <button type="submit" class="btn-save">เพิ่มการเปลี่ยนแปลง</button>
+          </form>
+        </div>
+      </div>` : '';
+
+    return `<div class="line-edit-card" data-line="${l.line_id}">
+      <button type="button" class="line-summary" onclick="APP.toggleLineExpand(${l.line_id})">
+        <span class="line-id-badge">ไลน์ ${l.line_id}</span>
+        <span class="badge badge-${todayCfg.status}">${STATUS_LABEL[todayCfg.status]}</span>
+        <span class="summary-detail mono">${summaryDetail}</span>
+        <span class="summary-fruits">${esc(fruitSummary)}</span>
+        <span class="chevron">${expanded?'▲':'▼'}</span>
+      </button>
+      ${detailHtml}
+    </div>`;
+  }).join('');
+  const baseDateLocked = state.settings.base_date_locked !== false;
+
+  return `
+   <div class="panel base-date-panel">
+     <h3>วันฐานของระบบ (base_date)</h3>
+     ${baseDateLocked ? `
+       <div class="base-date-row">
+         <span class="base-date-badge mono">🔒 ${state.settings.base_date}</span>
+         <button type="button" class="btn-unlock" onclick="APP.toggleBaseDateLock()">ปลดล็อคเพื่อแก้ไข</button>
+       </div>
+     ` : `
+       <div class="base-date-row">
+         <label>วันฐาน <input type="date" value="${state.settings.base_date}" onchange="APP.setBaseDate(this.value)"></label>
+         <button type="button" class="btn-lock" onclick="APP.toggleBaseDateLock()">ล็อควันฐาน</button>
+       </div>
+     `}
+     <p class="hint-text">ค่าถัง 1 ของทุกไลน์ ณ วันฐานนี้ ยึดตามช่อง "ค่าเริ่มถัง 1" ของแต่ละไลน์ด้านล่าง — ทุกหน้าที่แสดงการหมุนเวียนถัง (รายงานรายวัน / แผนรายสัปดาห์) จะอ้างอิงวันฐานนี้เสมอ และจะแสดงกำกับไว้ที่แถบด้านบนของหน้านั้นๆ ด้วย</p>
+   </div>
+   <div class="panel">
+     <h3>เพิ่มไลน์ใหม่</h3>
+     <form class="line-edit-card add-line-card" onsubmit="APP.addLine(event)">
+       <div class="line-edit-row">
+         <div class="field">
+           <label>เลขไลน์</label>
+           <input name="line_id" type="number" required>
+         </div>
+         <div class="field">
+           <label>สถานะ</label>
+           <select name="status" onchange="APP.toggleDateBasedFields(this)">${statusOptions('normal')}</select>
+         </div>
+         <div class="field">
+           <label>จำนวนถังหมุนเวียน (N)</label>
+           <input name="cycle_length" type="number" inputmode="numeric" min="1" max="6" step="1" value="6">
+           <span class="field-hint">กรอกได้ 1–6</span>
+         </div>
+         <div class="field only-normal">
+           <label>ค่าเริ่มถัง 1 (ณ วันฐาน)</label>
+           <input name="base_value" type="number" inputmode="numeric" min="1" max="6" step="1" value="1">
+           <span class="field-hint">1 ถึงจำนวนถัง (N)</span>
+         </div>
+         <div class="field only-normal">
+           <label>ค่าดองหวาน / ขึ้นบรรจุ</label>
+           <input name="dongwaan_value" type="number" inputmode="numeric" min="1" max="6" step="1" value="5">
+           <span class="field-hint">1 ถึงจำนวนถัง (N)</span>
+         </div>
+       </div>
+       <p class="hint-text only-datebased-hint" style="display:none">ไลน์นี้ใช้ระบบวันที่ — ไม่ต้องกรอกค่าเริ่มถัง/ค่าดองหวาน</p>
+       <div class="field only-datebased-field" style="display:none">
+         <label>ถังผสมน้ำ</label>
+         <label class="chip-check"><input type="checkbox" name="has_water_tank" checked> ไลน์นี้มีถังผสมน้ำ (คงที่)</label>
+       </div>
+       <div class="field">
+         <label>ชนิดผลไม้</label>
+         <div class="fruit-picker">${fruitCheckboxes([])}</div>
+       </div>
+       <div class="line-edit-actions">
+         <button type="submit" class="btn-save">เพิ่มไลน์</button>
+       </div>
+     </form>
+   </div>
+   <p class="hint-text">คลิกที่แถบไลน์เพื่อเปิด/ปิดการแก้ไข — แก้ไขค่าที่ต้องการแล้วกดปุ่ม "บันทึก"</p>
+   <div class="lines-edit-grid">${rows || '<div class="empty-row">ยังไม่มีไลน์</div>'}</div>
+  `;
+}
+
+function renderInspection(){
+  const lineOptions = state.lines.slice().sort((a,b)=>a.line_id-b.line_id).map(l=>`<option value="${l.line_id}">ไลน์ ${l.line_id}</option>`).join('');
+  const rows = state.inspectionNotes.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(n=>`
+    <tr><td class="mono">${n.date}</td><td>${n.line_id}</td><td>${n.tank_no}</td><td>${esc(n.note)}</td>
+    <td><button class="btn-del" onclick="APP.deleteInspection('${n._id}')">ลบ</button></td></tr>`).join('');
+  return `
+   <div class="panel">
+     <h3>บันทึกตรวจสอบ</h3>
+     <form class="inline-form" onsubmit="APP.addInspection(event)">
+       <label>วันที่ <input type="date" name="date" value="${todayISO()}" required></label>
+       <select name="line_id" required>${lineOptions}</select>
+       <select name="tank_no" required>${[1,2,3,4,5,6].map(t=>`<option value="${t}">ถัง ${t}</option>`).join('')}</select>
+       <input name="note" placeholder="บันทึก เช่น ปกติ / พบสิ่งแปลกปลอม" required style="flex:2;min-width:220px;">
+       <button type="submit">บันทึก</button>
+     </form>
+   </div>
+   <table class="data-table">
+     <thead><tr><th>วันที่</th><th>ไลน์</th><th>ถัง</th><th>บันทึก</th><th></th></tr></thead>
+     <tbody>${rows || '<tr><td colspan="5" class="empty-row">ยังไม่มีบันทึก</td></tr>'}</tbody>
+   </table>
+  `;
+}
+
+/* ===================== Shell render ===================== */
+function render(){
+  const app = document.getElementById('app');
+  if(!state.loaded){ app.innerHTML = '<div class="loading">กำลังโหลดข้อมูล…</div>'; return; }
+  const renderers = {daily:renderDaily, weekly:renderWeekly, soak:renderSoak, actual:renderActual, events:renderEvents, lines:renderLines, inspection:renderInspection};
+  const body = renderers[state.activeTab]();
+  const activeLabel = TABS.find(t=>t.id===state.activeTab).label;
+  app.innerHTML = `
+    <div class="shell">
+      <nav class="sidebar">
+        <div class="brand"><div class="brand-mark">&#8635;</div><div class="brand-text">หมุนเวียน<br>ถังดองผลไม้</div></div>
+        <div class="tabs">
+          ${TABS.map(t=>`<button class="tab-btn ${t.id===state.activeTab?'active':''}" onclick="APP.setTab('${t.id}')">${t.label}</button>`).join('')}
+        </div>
+        <div class="sidebar-foot">ข้อมูลชุดนี้ใช้ร่วมกันโดยทุกคนที่เปิดแอปนี้</div>
+      </nav>
+      <main class="content">
+        <header class="content-head"><h1>${activeLabel}</h1></header>
+        <div class="content-body">${body}</div>
+      </main>
+    </div>
+  `;
+}
+
+/* ===================== Actions (window.APP) ===================== */
+const APP = {
+  setTab(id){ state.activeTab=id; render(); },
+  setDailyDate(v){ state.dailyDate=v; state.dailyOpenEntry=null; state.dailyOpenHold=null; state.dailyOpenCheckForm=null; render(); },
+  setWeeklyDate(v){ state.weeklyDate=v; render(); },
+  toggleActualOnlyMismatch(){
+    state.actualOnlyMismatch = !state.actualOnlyMismatch;
+    render();
+  },
+  async toggleWeeklySchedule(lineId, dateISO, tankNo){
+    const idx = state.weeklySchedule.findIndex(w=>w.line_id===lineId && w.date===dateISO && w.tank_no===tankNo);
+    if(idx>=0){ state.weeklySchedule.splice(idx,1); }
+    else { state.weeklySchedule.push({_id:crypto.randomUUID(), line_id:lineId, date:dateISO, tank_no:tankNo}); }
+    await stSet('weeklySchedule', state.weeklySchedule);
+    render();
+  },
+
+  toggleDailyEntry(lineId, p){
+    const key = `${lineId}-${p}`;
+    state.dailyOpenEntry = state.dailyOpenEntry===key? null : key;
+    render();
+  },
+  async resolveDongwaanHold(lineId, tankNo, status){
+    const dueDate = state.dailyDate;
+    let hold = findHoldForLineOnDate(lineId, dueDate);
+    if(!hold || hold.tank_no!==tankNo) hold = findOpenHold(lineId);
+    if(!hold || hold.tank_no!==tankNo){
+      hold = {_id:crypto.randomUUID(), line_id:lineId, tank_no:tankNo, since_date:dueDate, status:'pending', note:'', resolved_date:null};
+      state.dongwaanHolds.push(hold);
+    }
+    hold.status = status;
+    hold.resolved_date = hold.since_date > state.dailyDate ? hold.since_date : state.dailyDate;
+    await stSet('dongwaanHolds', state.dongwaanHolds);
+    render();
+  },
+  openCheckNoteForm(lineId, tankNo, action){
+    state.dailyOpenCheckForm = {lineId, tankNo, action};
+    render();
+  },
+  closeCheckNoteForm(){
+    state.dailyOpenCheckForm = null;
+    render();
+  },
+  async submitCheckNote(e, lineId, tankNo, action){
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const note = f.get('note');
+    const dueDate = state.dailyDate;
+    let hold = findHoldForLineOnDate(lineId, dueDate);
+    if(!hold || hold.tank_no!==tankNo) hold = findOpenHold(lineId);
+    if(!hold || hold.tank_no!==tankNo){
+      hold = {_id:crypto.randomUUID(), line_id:lineId, tank_no:tankNo, since_date:dueDate, status:'pending', note:'', resolved_date:null};
+      state.dongwaanHolds.push(hold);
+    }
+    hold.note = note;
+    if(action==='fail'){
+      hold.status = 'fail';
+      hold.resolved_date = null;
+    } else if(action==='conditional'){
+      hold.status = 'conditional';
+      hold.resolved_date = hold.since_date > state.dailyDate ? hold.since_date : state.dailyDate;
+    }
+    await stSet('dongwaanHolds', state.dongwaanHolds);
+    state.dailyOpenCheckForm = null;
+    render();
+  },
+  async releaseDongwaanHold(lineId){
+    const hold = findOpenHold(lineId);
+    if(!hold) return;
+    hold.resolved_date = hold.since_date > state.dailyDate ? hold.since_date : state.dailyDate;
+    await stSet('dongwaanHolds', state.dongwaanHolds);
+    render();
+  },
+  async confirmLinePlan(lineId){
+    const line = state.lines.find(l=>l.line_id===lineId);
+    const date = state.dailyDate;
+    const cfg = line ? resolveLineConfig(line, date) : null;
+    if(!line || cfg.status!=='normal') return;
+    const ctx = buildCtx();
+    let count = 0;
+    for(let p=1; p<=cfg.cycle_length; p++){
+      const val = tankValue(line, date, p, ctx);
+      if(val==='ว่าง') continue;
+      const entry = findActualEntry(date, lineId, p);
+      if(entry){
+        if(Number(entry.actual_value)===Number(val)) continue;
+        entry.actual_value = val;
+      } else {
+        state.actualLog.push({_id:crypto.randomUUID(), date, line_id:lineId, tank_no:p, actual_value:val, note:''});
+      }
+      count++;
+    }
+    if(count>0){
+      await stSet('actualLog', state.actualLog);
+      showToast(`บันทึกไลน์ ${lineId} ตรงตามแผนแล้ว (${count} ถัง)`);
+    }
+    render();
+  },
+  async saveDailyActual(e, lineId, tankNo){
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const actualValue = Number(f.get('actual_value'));
+    const note = f.get('note');
+    const existing = findActualEntry(state.dailyDate, lineId, tankNo);
+    if(existing){
+      existing.actual_value = actualValue;
+      existing.note = note;
+    } else {
+      state.actualLog.push({_id:crypto.randomUUID(), date:state.dailyDate, line_id:lineId, tank_no:tankNo, actual_value:actualValue, note});
+    }
+    await stSet('actualLog', state.actualLog);
+    state.dailyOpenEntry = null;
+    render();
+  },
+  async deleteDailyActual(e, id){
+    e.preventDefault();
+    state.actualLog = state.actualLog.filter(a=>a._id!==id);
+    await stSet('actualLog', state.actualLog);
+    state.dailyOpenEntry = null;
+    render();
+  },
+
+  toggleDailyHold(lineId){
+    state.dailyOpenHold = state.dailyOpenHold===lineId? null : lineId;
+    render();
+  },
+  async saveDailyHold(e, lineId){
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const reason = f.get('reason');
+    if(!findFreezeEntry(state.dailyDate, lineId)){
+      state.lineFreezes.push({_id:crypto.randomUUID(), line_id:lineId, date:state.dailyDate, reason});
+      await stSet('lineFreezes', state.lineFreezes);
+    }
+    state.dailyOpenHold = null;
+    render();
+  },
+  async removeDailyHold(lineId){
+    const entry = findFreezeEntry(state.dailyDate, lineId);
+    if(!entry) return;
+    state.lineFreezes = state.lineFreezes.filter(f=>f._id!==entry._id);
+    await stSet('lineFreezes', state.lineFreezes);
+    render();
+  },
+
+  setBaseDate(v){
+    if(state.settings.base_date_locked !== false) return;
+    state.settings.base_date = v;
+    render();
+    stSet('settings', state.settings).catch(e=>console.error('save base_date failed', e));
+  },
+  toggleBaseDateLock(){
+    const currentlyLocked = state.settings.base_date_locked !== false;
+    state.settings.base_date_locked = !currentlyLocked;
+    render();
+    stSet('settings', state.settings).catch(e=>console.error('save base_date lock failed', e));
+    showToast(currentlyLocked ? 'ปลดล็อควันฐานแล้ว แก้ไขได้' : `ล็อควันฐาน ${state.settings.base_date} แล้ว`);
+  },
+
+  async addLine(e){
+    e.preventDefault();
+    const form = e.target;
+    const f = new FormData(form);
+    const id = Number(f.get('line_id'));
+    if(!id){ alert('กรุณาระบุเลขไลน์'); return; }
+    if(state.lines.some(l=>l.line_id===id)){ alert('มีเลขไลน์นี้อยู่แล้ว'); return; }
+    const status = f.get('status');
+    const cycleLen = Math.min(6, Math.max(1, Number(f.get('cycle_length')) || 1));
+    const fruits = Array.from(form.querySelectorAll('.fruit-picker input:checked')).map(i=>i.value);
+    let base_value = null, dongwaan_value = null;
+    if(status!=='date_based'){
+      const baseRaw = f.get('base_value');
+      const dongRaw = f.get('dongwaan_value');
+      base_value = Math.min(cycleLen, Math.max(1, Number(baseRaw) || 1));
+      dongwaan_value = Math.min(cycleLen, Math.max(1, Number(dongRaw) || 1));
+    }
+    const hasWaterTank = f.get('has_water_tank') === 'on';
+    state.lines.push({line_id:id, base_value, status, cycle_length:cycleLen, dongwaan_value, fruit_types:fruits, has_water_tank:hasWaterTank});
+    await stSet('lines', state.lines);
+    render();
+    showToast(`เพิ่มไลน์ ${id} เรียบร้อยแล้ว`);
+  },
+  toggleLineExpand(lineId){
+    state.expandedLines[lineId] = !state.expandedLines[lineId];
+    render();
+  },
+  toggleDateBasedFields(selectEl){
+    const card = selectEl.closest('.line-edit-card');
+    const isDB = selectEl.value === 'date_based';
+    card.querySelectorAll('.only-normal').forEach(el=> el.style.display = isDB? 'none':'');
+    card.querySelectorAll('.only-datebased-hint').forEach(el=> el.style.display = isDB? '':'none');
+    card.querySelectorAll('.only-datebased-field').forEach(el=> el.style.display = isDB? '':'none');
+  },
+  async saveLine(lineId, btn){
+    const card = btn.closest('.line-edit-card');
+    const status = card.querySelector('.f-status').value;
+    const cycleLen = Math.min(6, Math.max(1, Number(card.querySelector('.f-cycle_length').value) || 1));
+    const baseValRaw = card.querySelector('.f-base_value').value;
+    const dongRaw = card.querySelector('.f-dongwaan_value').value;
+    const fruits = Array.from(card.querySelectorAll('.fruit-picker input:checked')).map(i=>i.value);
+    const hasWaterTankInput = card.querySelector('.f-has_water_tank');
+    const line = state.lines.find(l=>l.line_id===lineId);
+    line.status = status;
+    line.cycle_length = cycleLen;
+    if(status==='date_based'){
+      line.base_value = null;
+      line.dongwaan_value = null;
+    } else {
+      line.base_value = baseValRaw===''? null : Math.min(cycleLen, Math.max(1, Number(baseValRaw)));
+      line.dongwaan_value = dongRaw===''? null : Math.min(cycleLen, Math.max(1, Number(dongRaw)));
+    }
+    line.has_water_tank = hasWaterTankInput? hasWaterTankInput.checked : true;
+    line.fruit_types = fruits;
+    await stSet('lines', state.lines);
+    render();
+    showToast(`บันทึกไลน์ ${lineId} เรียบร้อยแล้ว`);
+  },
+  async deleteLine(lineId){
+    if(!confirm('ลบไลน์นี้ออกจากระบบ?')) return;
+    state.lines = state.lines.filter(l=>l.line_id!==lineId);
+    await stSet('lines', state.lines); render();
+  },
+  suggestConfigBaseValue(lineId, dateInputEl){
+    const line = state.lines.find(l=>l.line_id===lineId);
+    const dateVal = dateInputEl.value;
+    if(!line || !dateVal) return;
+    const form = dateInputEl.closest('.config-history-form');
+    const baseInput = form.querySelector('.chf-base');
+    const ctx = buildCtx();
+    const suggested = tankValue(line, dateVal, 1, ctx);
+    if(typeof suggested === 'number') baseInput.value = suggested;
+  },
+  async addLineConfigChange(e, lineId){
+    e.preventDefault();
+    const form = e.target;
+    const f = new FormData(form);
+    const line = state.lines.find(l=>l.line_id===lineId);
+    if(!line) return;
+    const effective_date = f.get('effective_date');
+    const status = f.get('status');
+    const cycleLen = Math.min(6, Math.max(1, Number(f.get('cycle_length')) || 1));
+    let base_value = null, dongwaan_value = null;
+    if(status!=='date_based'){
+      base_value = Math.min(cycleLen, Math.max(1, Number(f.get('base_value')) || 1));
+      dongwaan_value = Math.min(cycleLen, Math.max(1, Number(f.get('dongwaan_value')) || 1));
+    }
+    const note = f.get('note') || '';
+    line.config_history = line.config_history || [];
+    if(line.config_history.some(h=>h.effective_date===effective_date)){
+      alert('มีรายการที่มีผลตั้งแต่วันที่นี้อยู่แล้ว กรุณาลบรายการเดิมก่อน หรือเลือกวันอื่น');
+      return;
+    }
+    line.config_history.push({_id:crypto.randomUUID(), effective_date, status, cycle_length:cycleLen, base_value, dongwaan_value, note});
+    await stSet('lines', state.lines);
+    render();
+    showToast(`เพิ่มการเปลี่ยนแปลงตั้งแต่วันที่ ${effective_date} ให้ไลน์ ${lineId} แล้ว`);
+  },
+  async deleteLineConfigChange(lineId, entryId){
+    const line = state.lines.find(l=>l.line_id===lineId);
+    if(!line) return;
+    line.config_history = (line.config_history||[]).filter(h=>h._id!==entryId);
+    await stSet('lines', state.lines);
+    render();
+  },
+
+  async addHoliday(e){
+    e.preventDefault(); const f = new FormData(e.target);
+    state.holidays.push({_id:crypto.randomUUID(), date:f.get('date'), note:f.get('note')});
+    await stSet('holidays', state.holidays); render();
+  },
+  async deleteHoliday(id){ state.holidays = state.holidays.filter(h=>h._id!==id); await stSet('holidays', state.holidays); render(); },
+
+  async addSunday(e){
+    e.preventDefault(); const f = new FormData(e.target);
+    state.sundayExceptions.push({_id:crypto.randomUUID(), date:f.get('date'), note:f.get('note')});
+    await stSet('sundayExceptions', state.sundayExceptions); render();
+  },
+  async deleteSunday(id){ state.sundayExceptions = state.sundayExceptions.filter(s=>s._id!==id); await stSet('sundayExceptions', state.sundayExceptions); render(); },
+
+  async addFreeze(e){
+    e.preventDefault(); const f = new FormData(e.target);
+    state.lineFreezes.push({_id:crypto.randomUUID(), line_id:Number(f.get('line_id')), date:f.get('date'), reason:f.get('reason')});
+    await stSet('lineFreezes', state.lineFreezes); render();
+  },
+  async deleteFreeze(id){ state.lineFreezes = state.lineFreezes.filter(fz=>fz._id!==id); await stSet('lineFreezes', state.lineFreezes); render(); },
+
+  async addSoak(e){
+    e.preventDefault(); const f = new FormData(e.target);
+    state.soakTanks.push({_id:crypto.randomUUID(), line_id:Number(f.get('line_id')), tank_no:Number(f.get('tank_no')), product_lot:f.get('product_lot'), soak_date:f.get('soak_date'), due_date:f.get('due_date')});
+    await stSet('soakTanks', state.soakTanks); render();
+  },
+  async deleteSoak(id){ state.soakTanks = state.soakTanks.filter(s=>s._id!==id); await stSet('soakTanks', state.soakTanks); render(); },
+
+  async addActual(e){
+    e.preventDefault(); const f = new FormData(e.target);
+    state.actualLog.push({_id:crypto.randomUUID(), date:f.get('date'), line_id:Number(f.get('line_id')), tank_no:Number(f.get('tank_no')), actual_value:Number(f.get('actual_value')), note:f.get('note')});
+    await stSet('actualLog', state.actualLog); render();
+  },
+  async deleteActual(id){ state.actualLog = state.actualLog.filter(a=>a._id!==id); await stSet('actualLog', state.actualLog); render(); },
+
+  async addInspection(e){
+    e.preventDefault(); const f = new FormData(e.target);
+    state.inspectionNotes.push({_id:crypto.randomUUID(), date:f.get('date'), line_id:Number(f.get('line_id')), tank_no:Number(f.get('tank_no')), note:f.get('note')});
+    await stSet('inspectionNotes', state.inspectionNotes); render();
+  },
+  async deleteInspection(id){ state.inspectionNotes = state.inspectionNotes.filter(n=>n._id!==id); await stSet('inspectionNotes', state.inspectionNotes); render(); }
+};
+window.APP = APP;
+
+initGoogleAuth();
+</script>
+</body>
+</html>
